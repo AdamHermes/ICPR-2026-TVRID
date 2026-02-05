@@ -3,22 +3,38 @@ defaults:
   - _self_
 
 seed: 42
-track: rgb  # rgb | depth | cross
+track: rgb
 
 data:
   eval_csv: data/DB_extracted/train_labels.csv
   val_mode: train
+  batch_size: 16  # Increase if memory allows
+  sequence:
+    length: 8  # Use more frames for temporal info
 
 model:
-  embedding_size: 128
-  lr: 1e-3
-  margin: 0.25
-  rgb_layers_not_frozen: 4
+  embedding_size: 512  # Larger embeddings
+  lr: 3e-4  # Lower learning rate
+  margin: 0.3  # Slightly larger margin
+  rgb_layers_not_frozen: 6  # Unfreeze more layers
+  backbone: resnet101  # Try deeper backbone
+  use_attention: true
+  use_hard_mining: true
 
 trainer:
-  max_epochs: 20
+  max_epochs: 50  # Train longer
   accelerator: auto
   devices: 1
   log_every_n_steps: 10
   enable_checkpointing: true
-  precision: 32
+  precision: 16-mixed  # Use mixed precision for speed
+  gradient_clip_val: 1.0  # Clip gradients
+  
+optimizer:
+  name: adamw
+  weight_decay: 0.0001
+  
+scheduler:
+  name: cosine
+  warmup_epochs: 5
+  min_lr: 1e-6
