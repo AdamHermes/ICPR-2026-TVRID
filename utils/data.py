@@ -48,24 +48,44 @@ class DataConfig:
     depth_mask_threshold: float = 0.2
 
 
-def build_transforms(cfg: TransformConfig) -> Tuple[T.Compose, T.Compose]:
+def build_transforms(cfg: TransformConfig, is_train: bool = False) -> Tuple[T.Compose, T.Compose]:
     """Transforms applied *after* stacking sequences to keep spatial consistency."""
-    rgb_transform = T.Compose(
-        [
+    
+    if is_train:
+        # Training transforms with heavy augmentation
+        rgb_transform = T.Compose([
+            T.Resize(cfg.resize),
+            T.RandomCrop(cfg.crop),  # Random crop instead of center
+            T.RandomHorizontalFlip(p=0.5),  # Horizontal flip
+            T.ConvertImageDtype(torch.float32),
+            T.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.3, hue=0.1),  # Color jitter
+            T.Normalize(mean=cfg.rgb_mean, std=cfg.rgb_std),
+            T.RandomErasing(p=0.5, scale=(0.02, 0.2)),  # Random erasing - CRITICAL for re-ID
+        ])
+        
+        depth_transform = T.Compose([
+            T.Resize(cfg.resize),
+            T.RandomCrop(cfg.crop),
+            T.ConvertImageDtype(torch.float32),
+            T.Normalize(mean=[cfg.depth_mean], std=[cfg.depth_std]),
+            T.RandomErasing(p=0.3, scale=(0.02, 0.15)),  # Less aggressive for depth
+        ])
+    else:
+        # Validation/test transforms (no augmentation)
+        rgb_transform = T.Compose([
             T.Resize(cfg.resize),
             T.CenterCrop(cfg.crop),
             T.ConvertImageDtype(torch.float32),
             T.Normalize(mean=cfg.rgb_mean, std=cfg.rgb_std),
-        ]
-    )
-    depth_transform = T.Compose(
-        [
+        ])
+        
+        depth_transform = T.Compose([
             T.Resize(cfg.resize),
             T.CenterCrop(cfg.crop),
             T.ConvertImageDtype(torch.float32),
             T.Normalize(mean=[cfg.depth_mean], std=[cfg.depth_std]),
-        ]
-    )
+        ])
+    
     return rgb_transform, depth_transform
 
 
@@ -294,29 +314,36 @@ class UnifiedReIDDataModule(L.LightningDataModule):
 
     def setup(self, stage: Optional[str] = None) -> None:
         if stage is None or stage == "fit":
+            # Training transforms WITH augmentation
+            rgb_train_t, depth_train_t = build_transforms(self.cfg.transforms, is_train=True)
+            
             self.train_set = UnifiedReIDDataset(
                 csv_path=self.cfg.train_csv,
                 root=self.cfg.root,
                 modality=self.cfg.modality,
                 mode="train",
                 sequence=self.cfg.sequence,
-                rgb_transform=self.rgb_transform,
-                depth_transform=self.depth_transform,
+                rgb_transform=rgb_train_t,  # Use augmented transforms
+                depth_transform=depth_train_t,  # Use augmented transforms
                 train_subdir=self.cfg.train_subdir,
                 eval_subdir=self.cfg.eval_subdir,
                 sampling_strategy=self.cfg.sequence.sampling,
                 mask_rgb_with_depth=self.cfg.mask_rgb_with_depth,
                 depth_mask_threshold=self.cfg.depth_mask_threshold,
             )
+        
         if stage is None or stage in {"fit", "validate", "test", "predict"}:
+            # Validation transforms WITHOUT augmentation
+            rgb_val_t, depth_val_t = build_transforms(self.cfg.transforms, is_train=False)
+            
             self.eval_set = UnifiedReIDDataset(
                 csv_path=self.cfg.eval_csv,
                 root=self.cfg.root,
                 modality=self.cfg.modality,
                 mode=self.cfg.val_mode,
                 sequence=self.cfg.sequence,
-                rgb_transform=self.rgb_transform,
-                depth_transform=self.depth_transform,
+                rgb_transform=rgb_val_t,  # Use non-augmented transforms
+                depth_transform=depth_val_t,  # Use non-augmented transforms
                 train_subdir=self.cfg.train_subdir,
                 eval_subdir=self.cfg.eval_subdir,
                 sampling_strategy=self.cfg.sequence.sampling,
