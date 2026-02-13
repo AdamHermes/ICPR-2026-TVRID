@@ -12,33 +12,48 @@ class BatchHardTripletLoss(nn.Module):
         self.margin = margin
 
     def forward(self, anchor: torch.Tensor, positive: torch.Tensor, negative: torch.Tensor) -> torch.Tensor:
-        # Stack all embeddings
-        embeddings = torch.cat([anchor, positive, negative], dim=0)
         batch_size = anchor.size(0)
         
-        # Create labels (0, 0, 1, 1, 2, 2, ...) for anchor-positive pairs
-        labels = torch.arange(batch_size, device=anchor.device).repeat(2)
+        # Stack embeddings: [anchor, positive, negative]
+        embeddings = torch.cat([anchor, positive, negative], dim=0)  # Shape: [3*B, D]
+        
+        # Create labels for anchor-positive pairs
+        # Anchors and positives get same label (0, 1, 2, ..., B-1)
+        # Negatives get different labels (B, B+1, ..., 2B-1)
+        labels = torch.cat([
+            torch.arange(batch_size, device=anchor.device),  # anchor labels: 0, 1, 2, ...
+            torch.arange(batch_size, device=anchor.device),  # positive labels: 0, 1, 2, ... (same as anchor)
+            torch.arange(batch_size, batch_size * 2, device=anchor.device)  # negative labels: B, B+1, ...
+        ])
         
         # Compute pairwise distance matrix
-        dist_mat = torch.cdist(embeddings[:batch_size*2], embeddings, p=2)
+        dist_mat = torch.cdist(embeddings, embeddings, p=2)  # Shape: [3*B, 3*B]
         
-        loss = 0
+        loss = 0.0
         count = 0
+        
+        # For each anchor
         for i in range(batch_size):
-            anchor_idx = i
-            # Hard positive: furthest positive (same identity)
-            pos_mask = labels[:batch_size*2] == labels[anchor_idx]
-            pos_mask[anchor_idx] = False  # Exclude self
+            anchor_label = labels[i]
             
-            if pos_mask.any():
-                hardest_pos_dist = dist_mat[anchor_idx][pos_mask].max()
+            # Find positive samples (same label as anchor, but not anchor itself)
+            pos_mask = (labels == anchor_label)
+            pos_mask[i] = False  # Exclude the anchor itself
+            
+            # Find negative samples (different label from anchor)
+            neg_mask = (labels != anchor_label) & (labels < batch_size)  # Only use negatives from negative set
+            neg_mask[batch_size * 2:] = True  # Include all negatives
+            
+            if pos_mask.any() and neg_mask.any():
+                # Hard positive: furthest positive sample
+                hardest_pos_dist = dist_mat[i][pos_mask].max()
                 
-                # Hard negative: closest negative (different identity)
-                neg_mask = labels != labels[anchor_idx]
-                if neg_mask.any():
-                    hardest_neg_dist = dist_mat[anchor_idx][neg_mask].min()
-                    loss += torch.relu(hardest_pos_dist - hardest_neg_dist + self.margin)
-                    count += 1
+                # Hard negative: closest negative sample
+                hardest_neg_dist = dist_mat[i][neg_mask].min()
+                
+                # Triplet loss
+                loss += torch.relu(hardest_pos_dist - hardest_neg_dist + self.margin)
+                count += 1
         
         return loss / max(count, 1)
 

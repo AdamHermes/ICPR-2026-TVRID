@@ -3,51 +3,33 @@ defaults:
   - _self_
 
 seed: 42
-track: rgb
-
-data:
-  eval_csv: data/DB_extracted/train_labels.csv
-  val_mode: train
-  batch_size: 16  # Increase if memory allows
-  sequence:
-    length: 8  # Use more frames for temporal info
+track: rgb  # rgb | depth | cross
 
 model:
-  embedding_size: 512  # Larger embeddings
-  lr: 3e-4  # Lower learning rate
-  margin: 0.3  # Slightly larger margin
-  rgb_layers_not_frozen: 6  # Unfreeze more layers
-  backbone: resnet101  # Try deeper backbone
-  use_attention: true
-  use_hard_mining: true
+  embedding_size: 512  # Start with 256, increase to 512 if training is stable
+  lr: 3e-4
+  margin: 0.3
+  rgb_layers_not_frozen: 4  # Start with 4, can increase to 6 later
 
 trainer:
-  max_epochs: 50  # Train longer
+  max_epochs: 50
   accelerator: auto
   devices: 1
   log_every_n_steps: 10
   enable_checkpointing: true
-  precision: 16-mixed  # Use mixed precision for speed
-  gradient_clip_val: 1.0  # Clip gradients
-  
-optimizer:
-  name: adamw
-  weight_decay: 0.0001
-  
-scheduler:
-  name: cosine
-  warmup_epochs: 5
-  min_lr: 1e-6
+  precision: 16-mixed
+  gradient_clip_val: 1.0
 
+# Only ONE data section - this overrides defaults from data/data.yaml
 data:
   root: data/DB_extracted
   train_csv: data/DB_extracted/train_split.csv
-  eval_csv: data/DB_extracted/valid_split.csv  # Using same for now
+  eval_csv: data/DB_extracted/valid_split.csv
   train_subdir: train
-  eval_subdir: train  # Using train for validation
+  eval_subdir: train
   modality: rgb
   val_mode: train
-  batch_size: 32  # Increase if GPU allows
+  batch_size: 32
   num_workers: 4
   shuffle: true
   pin_memory: true
@@ -55,8 +37,8 @@ data:
   mask_rgb_with_depth: false
   depth_mask_threshold: 0.2
   sequence:
-    length: 5  # Use 5 frames per sequence
-    sampling: random  # Random sampling during training
+    length: 5
+    sampling: random
   transforms:
     resize: 256
     crop: 224
