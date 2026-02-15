@@ -34,7 +34,7 @@ def get_args():
     parser.add_argument("--output", default="rankings.csv")
     parser.add_argument("--sequence-length", type=int, default=None, help="Override sequence length (optional)")
     return parser.parse_args()
-
+# In eval_generate.py, update the embed_dataset function
 
 @torch.no_grad()
 def embed_dataset(
@@ -74,7 +74,6 @@ def embed_dataset(
         ids.extend(_coerce_ids(batch["gallery_id"]))
         paths.extend(batch["path"])
 
-        # batch entries are lists of tensors; stack them
         def _to_tensor_list(key):
             x = batch[key]
             if isinstance(x, list):
@@ -83,10 +82,14 @@ def embed_dataset(
 
         if query_mod in batch:
             query_x = _to_tensor_list(query_mod)
-            query_embeds.append(model.encode(query_x, query_mod))
+            # Use BN features for inference (not raw features)
+            _, query_bn, _ = model.forward(query_x, query_mod)
+            query_embeds.append(query_bn)
+            
         if gallery_mod in batch:
             gallery_x = _to_tensor_list(gallery_mod)
-            gallery_embeds.append(model.encode(gallery_x, gallery_mod))
+            _, gallery_bn, _ = model.forward(gallery_x, gallery_mod)
+            gallery_embeds.append(gallery_bn)
 
     query_mat = torch.cat(query_embeds, dim=0)
     gallery_mat = torch.cat(gallery_embeds, dim=0)

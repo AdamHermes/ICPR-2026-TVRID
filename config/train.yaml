@@ -3,24 +3,25 @@ defaults:
   - _self_
 
 seed: 42
-track: rgb  # rgb | depth | cross
+track: rgb
 
 model:
-  embedding_size: 512  # Start with 256, increase to 512 if training is stable
-  lr: 3e-4
+  embedding_size: 256
+  lr: 0.00035  # Exact LR from paper
   margin: 0.3
-  rgb_layers_not_frozen: 4  # Start with 4, can increase to 6 later
+  rgb_layers_not_frozen: 4
+  num_classes: 62  # Update based on your train split
+  use_mctl: true
+  use_center_loss: true
 
 trainer:
-  max_epochs: 50
+  max_epochs: 120  # Paper uses 120 epochs
   accelerator: auto
   devices: 1
   log_every_n_steps: 10
-  enable_checkpointing: true
   precision: 16-mixed
   gradient_clip_val: 1.0
 
-# Only ONE data section - this overrides defaults from data/data.yaml
 data:
   root: data/DB_extracted
   train_csv: data/DB_extracted/train_split.csv
@@ -29,15 +30,13 @@ data:
   eval_subdir: train
   modality: rgb
   val_mode: train
-  batch_size: 32
+  batch_size: 32  # Paper uses C×N structure (e.g., 8 classes × 4 instances = 32)
   num_workers: 4
   shuffle: true
   pin_memory: true
   persistent_workers: true
-  mask_rgb_with_depth: false
-  depth_mask_threshold: 0.2
   sequence:
-    length: 5
+    length: 1  # Paper doesn't use sequences, just single frames
     sampling: random
   transforms:
     resize: 256
